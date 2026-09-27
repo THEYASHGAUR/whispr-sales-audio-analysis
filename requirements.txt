@@ -1,0 +1,11 @@
+faster-whisper>=1.0.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+python-dotenv>=1.0.0
+soundfile>=0.12.0
+numpy>=1.26.0
+scikit-learn>=1.4.0
+resemblyzer>=0.1.4
+# webrtcvad (via resemblyzer) needs pkg_resources; setuptools 81+ removed it on some installs.
+setuptools>=77.0.3,<81

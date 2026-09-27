@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WAV Transcription</title>
+    <style>
+      :root {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        line-height: 1.5;
+        color: #1a1a1a;
+        background: #f4f4f5;
+      }
+      body {
+        max-width: 42rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+      }
+      h1 {
+        font-size: 1.5rem;
+        margin-bottom: 0.25rem;
+      }
+      .muted {
+        color: #52525b;
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
+      }
+      form {
+        background: #fff;
+        border: 1px solid #e4e4e7;
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+      }
+      input[type="file"] {
+        width: 100%;
+        margin-bottom: 1rem;
+      }
+      button {
+        background: #18181b;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        padding: 0.6rem 1rem;
+        font-size: 1rem;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      #status {
+        min-height: 1.25rem;
+        margin-bottom: 1rem;
+        color: #52525b;
+      }
+      #output {
+        background: #fff;
+        border: 1px solid #e4e4e7;
+        border-radius: 8px;
+        padding: 1.25rem;
+        white-space: pre-wrap;
+        display: none;
+      }
+      #output.visible {
+        display: block;
+      }
+      .meta {
+        font-size: 0.9rem;
+        color: #3f3f46;
+        margin-bottom: 0.75rem;
+      }
+      .error {
+        color: #b91c1c;
+      }
+      .dialogue {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .turn {
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+      }
+      .turn.agent {
+        background: #eff6ff;
+        border-left: 4px solid #2563eb;
+      }
+      .turn.customer {
+        background: #f0fdf4;
+        border-left: 4px solid #16a34a;
+      }
+      .turn-label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 0.35rem;
+        color: #3f3f46;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>WAV → Text</h1>
+    <p class="muted">
+      Upload a <code>.wav</code> file. Transcription runs locally via faster-whisper.
+    </p>
+
+    <form id="upload-form">
+      <label for="audio">Audio file (.wav)</label>
+      <input type="file" id="audio" name="file" accept=".wav,audio/wav" required />
+      <button type="submit" id="submit-btn">Transcribe</button>
+    </form>
+
+    <div id="status" aria-live="polite"></div>
+    <div id="output" role="region" aria-label="Transcription result"></div>
+
+    <script>
+      const form = document.getElementById("upload-form");
+      const statusEl = document.getElementById("status");
+      const outputEl = document.getElementById("output");
+      const submitBtn = document.getElementById("submit-btn");
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const input = document.getElementById("audio");
+        if (!input.files?.length) return;
+
+        const formData = new FormData();
+        formData.append("file", input.files[0]);
+
+        submitBtn.disabled = true;
+        outputEl.classList.remove("visible");
+        statusEl.textContent = "Transcribing… (first run may download the model)";
+        statusEl.classList.remove("error");
+
+        try {
+          const res = await fetch("/api/transcribe", {
+            method: "POST",
+            body: formData,
+          });
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok) {
+            const detail = data.detail ?? res.statusText;
+            throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+          }
+
+          statusEl.textContent = "Done.";
+          const turns = Array.isArray(data.turns) ? data.turns : [];
+          const dialogueHtml = turns.length
+            ? `<div class="dialogue">${turns
+                .map(
+                  (t) =>
+                    `<div class="turn ${escapeHtml(t.role)}">` +
+                    `<div class="turn-label">${t.role === "customer" ? "Customer" : "Agent"}</div>` +
+                    `<div>${escapeHtml(t.text)}</div></div>`
+                )
+                .join("")}</div>`
+            : `<div>${escapeHtml(data.text || "(empty transcript)")}</div>`;
+
+          outputEl.innerHTML =
+            `<div class="meta">Languages: <strong>${escapeHtml((data.languages || []).join(", ") || "unknown")}</strong> · ` +
+            `Time: <strong>${data.processing_time_seconds}s</strong></div>` +
+            dialogueHtml;
+          outputEl.classList.add("visible");
+        } catch (err) {
+          statusEl.textContent = err.message || "Request failed";
+          statusEl.classList.add("error");
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+    </script>
+  </body>
+</html>
